@@ -1,27 +1,26 @@
 import json
+from typing import Dict, List
 from fastapi import WebSocket
+
+from app.models.message import Message
 
 
 class WebSocketManager:
     def __init__(self) -> None:
-        self.active_connection: list[WebSocket] = []
+        self.active_connections: Dict[str, List[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, chat_id: str):
         await websocket.accept()
-        self.active_connection.append(websocket)
+        if chat_id not in self.active_connections:
+            self.active_connections[chat_id] = []
+        self.active_connections[chat_id].append(websocket)
 
-    def disconnect(self, websocket: WebSocket):
-        self.active_connection.remove(websocket)
+    def disconnect(self, websocket: WebSocket, chat_id: str):
+        self.active_connections[chat_id].remove(websocket)
+        if not self.active_connections[chat_id]:
+            del self.active_connections[chat_id]
 
-    async def websocket_endpoint(self, websocket: WebSocket):
-        await websocket.accept()
-        while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(data)
-
-
-websocket_manager = WebSocketManager()
-
-
-async def websocket_endpoint(websocket: WebSocket, chat_id: str):
-    await websocket_manager.websocket_endpoint(websocket)
+    async def broadcast(self, chat_id: str, message: Message):
+        if chat_id in self.active_connections:
+            for connection in self.active_connections[chat_id]:
+                await connection.send_json(message)

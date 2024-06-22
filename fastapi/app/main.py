@@ -1,11 +1,12 @@
+import json
 import threading
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from app.api import endpoints
 from app.kafka.consumer import KafkaConsumerClient
-from app.websockets.websocket_manager import websocket_endpoint
+from app.websockets.websocket_manager import WebSocketManager
 
 load_dotenv()
 
@@ -19,6 +20,20 @@ app.include_router(endpoints.router)
 
 
 # Include WebSocket endpoint
+websocket_manager = WebSocketManager()
+
+
+async def websocket_endpoint(websocket: WebSocket, chat_id: str):
+    await websocket_manager.connect(websocket, chat_id)
+    try:
+        while True:
+            message = await websocket.receive_json()
+            await websocket_manager.broadcast(chat_id, message)
+    except WebSocketDisconnect as e:
+        print(f"Runtime Error: {e}")
+        websocket_manager.disconnect(websocket, chat_id)
+
+
 app.add_api_websocket_route("/ws/{chat_id}", websocket_endpoint)
 
 
